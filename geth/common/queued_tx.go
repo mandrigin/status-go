@@ -4,7 +4,16 @@ import (
 	"context"
 	"sync"
 
+	"errors"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+)
+
+var (
+	//ErrQueuedTxInProgress - error transaction in progress
+	ErrQueuedTxInProgress = errors.New("transaction is in progress")
+	//ErrQueuedTxDiscarded - error transaction discarded
+	ErrQueuedTxDiscarded = errors.New("transaction has been discarded")
 )
 
 // QueuedTx holds enough information to complete the queued transaction.
@@ -14,8 +23,8 @@ type QueuedTx struct {
 	ctx        context.Context
 	args       SendTxArgs
 	inProgress bool // true if transaction is being sent
-	done       chan struct{}
-	discard    chan struct{}
+	done       chan error
+	doneOnce   sync.Once
 	err        error
 	sync.RWMutex
 }
@@ -23,11 +32,10 @@ type QueuedTx struct {
 // NewQueuedTx QueuedTx constructor.
 func NewQueuedTx(ctx context.Context, id QueuedTxID, args SendTxArgs) *QueuedTx {
 	return &QueuedTx{
-		id:      id,
-		ctx:     ctx,
-		args:    args,
-		done:    make(chan struct{}, 1),
-		discard: make(chan struct{}, 1),
+		id:   id,
+		ctx:  ctx,
+		args: args,
+		done: make(chan error, 1),
 	}
 }
 
@@ -55,14 +63,6 @@ func (tx *QueuedTx) Hash() common.Hash {
 	return tx.hash
 }
 
-// SetHash sets queued transaction hash.
-func (tx *QueuedTx) SetHash(hash common.Hash) {
-	tx.Lock()
-	defer tx.Unlock()
-
-	tx.hash = hash
-}
-
 // Context gets queued transaction ctx.
 func (tx *QueuedTx) Context() context.Context {
 	tx.RLock()
@@ -87,73 +87,71 @@ func (tx *QueuedTx) Args() SendTxArgs {
 	return tx.args
 }
 
-// SetArgs sets queued transaction args.
-func (tx *QueuedTx) SetArgs(args SendTxArgs) {
+// UpdateGasPrice updates gas price if not set.
+func (tx *QueuedTx) UpdateGasPrice(gasGetter func() (*hexutil.Big, error)) (*hexutil.Big, error) {
 	tx.Lock()
 	defer tx.Unlock()
 
-	tx.args = args
-}
+	if tx.args.GasPrice == nil {
+		value, err := gasGetter()
+		if err != nil {
+			return tx.args.GasPrice, err
+		}
 
-// InProgressCompareAndSwap returns false if given state equals tx.InProgress state, otherwise changes InProgress state
-func (tx *QueuedTx) InProgressCompareAndSwap(state bool) (isSwapped bool) {
-	tx.Lock()
-	defer tx.Unlock()
-
-	if tx.inProgress == state {
-		return
+		tx.args.GasPrice = value
 	}
 
-	tx.inProgress = state
-	isSwapped = true
-
-	return
+	return tx.args.GasPrice, nil
 }
 
-// InProgress gets queued transaction progress state.
-func (tx *QueuedTx) InProgress() bool {
-	tx.RLock()
-	defer tx.RUnlock()
-
-	return tx.inProgress
-}
-
-// SetInProgress sets queued transaction progress state.
-func (tx *QueuedTx) SetInProgress(p bool) {
+// Start marks transaction as started.
+func (tx *QueuedTx) Start() error {
 	tx.Lock()
 	defer tx.Unlock()
 
-	tx.inProgress = p
+	if tx.inProgress == true {
+		return ErrQueuedTxInProgress
+	}
+
+	tx.inProgress = true
+
+	return nil
 }
 
-// Done gets queued transaction done channel.
-func (tx *QueuedTx) Done() chan struct{} {
-	tx.RLock()
-	defer tx.RUnlock()
+// Stop marks transaction as stopped.
+func (tx *QueuedTx) Stop() {
+	tx.Lock()
+	defer tx.Unlock()
 
+	tx.inProgress = false
+}
+
+// Done transaction with success or error if given.
+func (tx *QueuedTx) Done(hash common.Hash, err ...error) {
+	tx.doneOnce.Do(func() {
+		tx.hash = hash
+
+		if len(err) != 0 {
+			tx.err = err[0]
+			tx.done <- tx.err
+		}
+		close(tx.done)
+	})
+}
+
+// Wait returns read only channel that signals either success or error transaction finish.
+func (tx *QueuedTx) Wait() <-chan error {
 	return tx.done
 }
 
-// Discard gets queued transaction discard channel.
-func (tx *QueuedTx) Discard() chan struct{} {
-	tx.RLock()
-	defer tx.RUnlock()
-
-	return tx.discard
+// Discard done transaction with discard error.
+func (tx *QueuedTx) Discard() {
+	tx.doneOnce.Do(func() {
+		tx.done <- ErrQueuedTxDiscarded
+	})
 }
 
 // Err gets queued transaction error.
 func (tx *QueuedTx) Err() error {
-	tx.RLock()
-	defer tx.RUnlock()
-
 	return tx.err
-}
-
-// SetErr sets queued transaction error.
-func (tx *QueuedTx) SetErr(err error) {
-	tx.Lock()
-	defer tx.Unlock()
-
-	tx.err = err
 }
