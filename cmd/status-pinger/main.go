@@ -7,16 +7,18 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"time"
 
 	"github.com/status-im/status-go/geth/api"
 	"github.com/status-im/status-go/geth/params"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 // makeNodeConfig parses incoming CLI options and returns node configuration object
 func makeNodeConfig() (*params.NodeConfig, error) {
 
-	return params.LoadNodeConfig(`{
+	configFormat := `{
     "APIModules": "db,eth,net,web3,shh,personal,admin",
     "BootClusterConfig": {
         "BootNodes": [
@@ -41,13 +43,13 @@ func makeNodeConfig() (*params.NodeConfig, error) {
         "RootHash": "77eedcf6f940940b3615da49109c1ba57b95c3fff8bcf16f20ac579c3ae24e58",
         "RootNumber": 478
     },
-    "DataDir": "/Users/mandrigin/Desktop/hnna/ethereum/testnet_rpc",
+    "DataDir": "%s/data/ethereum/testnet_rpc",
     "DevMode": false,
     "HTTPHost": "localhost",
     "HTTPPort": 8545,
     "IPCEnabled": false,
     "IPCFile": "geth.ipc",
-    "KeyStoreDir": "/Users/mandrigin/Desktop/hnna/keystore",
+    "KeyStoreDir": "%s/data/keystore",
     "LightEthConfig": {
         "DatabaseCache": 16,
         "Enabled": true,
@@ -55,7 +57,7 @@ func makeNodeConfig() (*params.NodeConfig, error) {
     },
     "ListenAddr": ":0",
     "LogEnabled": true,
-    "LogFile": "/Users/mandrigin/Desktop/hnna/ethereum/testnet_rpc/geth.log",
+    "LogFile": "%s/data/ethereum/testnet_rpc/geth.log",
     "LogLevel": "DEBUG",
     "LogToStderr": true,
     "MaxPeers": 25,
@@ -77,7 +79,7 @@ func makeNodeConfig() (*params.NodeConfig, error) {
     "WSHost": "localhost",
     "WSPort": 8546,
     "WhisperConfig": {
-        "DataDir": "/Users/mandrigin/Desktop/hnna/ethereum/testnet_rpc/wnode",
+        "DataDir": "%s/data/ethereum/testnet_rpc/wnode",
         "EnableMailServer": false,
         "EnablePushNotification": false,
         "Enabled": true,
@@ -91,10 +93,21 @@ func makeNodeConfig() (*params.NodeConfig, error) {
         "PasswordFile": "",
         "TTL": 120
     }
-}`)
+}`
+
+	cwd, _ := os.Getwd()
+
+	config := fmt.Sprintf(configFormat, cwd, cwd, cwd, cwd)
+	return params.LoadNodeConfig(config)
 }
 
 func main() {
+
+	db, err := leveldb.OpenFile("/tmp/hnny-persistence.db", nil)
+	if err != nil {
+		log.Fatal("can't open levelDB file. ERR: %v", err)
+	}
+	defer db.Close()
 
 	config, err := makeNodeConfig()
 	if err != nil {
@@ -124,13 +137,11 @@ func main() {
 		return
 	}
 
-	loginAndRun(api.NewStatusAPIWithBackend(backend))
+	loginAndRun(api.NewStatusAPIWithBackend(backend), db)
 
 	// wait till node has been stopped
 	node.Wait()
 }
-
-const ()
 
 func unmarshalJSON(j string) interface{} {
 	var v interface{}
@@ -138,10 +149,37 @@ func unmarshalJSON(j string) interface{} {
 	return v
 }
 
-func loginAndRun(api *api.StatusAPI) {
-	//address, pubKey, mnemonic, err := api.CreateAccount("my-cool-password")
-	//fmt.Println("CREATED Address:", address, "PubK:", pubKey, "MM:", mnemonic, "ERR:", err)
-	err := api.SelectAccount("0x7F4b7223436bfBdc8798bf7114164079CB022D25", "my-cool-password")
+const (
+	KEY_ADDRESS = "hnny.address"
+)
+
+func getAccountAddress(db *leveldb.DB) string {
+	addressBytes, err := db.Get([]byte(KEY_ADDRESS), nil)
+	if err != nil {
+		log.Printf("Error while getting address: %v", err)
+		return ""
+	}
+	return string(addressBytes)
+}
+
+func saveAccountAddress(address string, db *leveldb.DB) {
+	db.Put([]byte(KEY_ADDRESS), []byte(address), nil)
+}
+
+func loginAndRun(api *api.StatusAPI, db *leveldb.DB) {
+	accountAddress := getAccountAddress(db)
+
+	if accountAddress == "" {
+		address, _, _, err := api.CreateAccount("my-cool-password")
+		if err != nil {
+			log.Fatalf("could not create an account. ERR: %v", err)
+		}
+		saveAccountAddress(address, db)
+		accountAddress = address
+	}
+
+	err := api.SelectAccount(accountAddress, "my-cool-password")
+	log.Println("Logged in as", accountAddress)
 	if err != nil {
 		log.Fatalf("Failed to select account. ERR: %+v", err)
 	}
@@ -162,7 +200,7 @@ func loginAndRun(api *api.StatusAPI) {
 
 	go readChannel(api, fmt.Sprintf(cmd, filterID))
 
-	go writeToChannel(api, key.(string), "0x7F4b7223436bfBdc8798bf7114164079CB022D25")
+	go writeToChannel(api, key.(string), accountAddress)
 }
 
 func writeToChannel(api *api.StatusAPI, key, from string) {
@@ -197,7 +235,6 @@ func readChannel(api *api.StatusAPI, cmd string) {
 }
 
 func unrawrChatMessage(message string) string {
-
 	bytes, err := hex.DecodeString(message[2:])
 	if err != nil {
 		return err.Error()
@@ -228,7 +265,7 @@ func makeChatMessage(msg string) string {
 	format := `{:message-id "%s", :group-id "humans-need-not-apply", :content "%s", :username "Robotic Jet Gopher", :type :public-group-message, :show? true, :clock-value 1, :requires-ack? false, :content-type "text/plain", :timestamp %d}`
 
 	messageID := newUUID()
-	timestamp := time.Now().Unix()
+	timestamp := time.Now().Unix() * 1000
 
 	return fmt.Sprintf(format, messageID, msg, timestamp)
 }

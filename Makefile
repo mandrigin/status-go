@@ -42,6 +42,9 @@ HELP_FUN = \
 			   print "\n"; \
 		   }
 
+statusgo-bots: ##@docker Build a docker image with bots for reading/writing the channels
+	docker build --file _assets/build/Dockerfile --build-arg "build_tags=$(BUILD_TAGS)" . -t $(DOCKER_IMAGE_NAME):latest
+
 statusgo: ##@build Build status-go as statusd server
 	go build -i -o $(GOBIN)/statusd -v -tags '$(BUILD_TAGS)' $(shell _assets/build/testnet-flags.sh) ./cmd/statusd
 	@echo "Compilation done."
