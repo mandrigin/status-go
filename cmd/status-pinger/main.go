@@ -209,15 +209,13 @@ func writeToChannel(api *api.StatusAPI, key, from string) {
 		cmd := `{"jsonrpc":"2.0","id":0,"method":"shh_post","params":[{"from":"%s","topic":"0xaabb11ee","payload":"%s","symKeyID":"%s","sym-key-password":"status","ttl":2400,"powTarget":0.001,"powTime":1}]}`
 		payload := rawrChatMessage(makeChatMessage(message))
 		cmd = fmt.Sprintf(cmd, from, payload, key)
-		log.Println("CMD:", cmd)
-		log.Println("SENT:", api.CallRPC(cmd))
+		log.Println("-> SENT:", api.CallRPC(cmd))
 
 		time.Sleep(10 * time.Second)
 	}
 }
 
 func readChannel(api *api.StatusAPI, cmd string) {
-
 	for {
 		f := unmarshalJSON(api.CallRPC(cmd))
 		v := f.(map[string]interface{})["result"]
@@ -225,7 +223,7 @@ func readChannel(api *api.StatusAPI, cmd string) {
 		case []interface{}:
 			for _, u := range vv {
 				payload := u.(map[string]interface{})["payload"]
-				log.Println("PAYLOAD:", unrawrChatMessage(payload.(string)))
+				log.Println("<- RECEIVED:", unrawrChatMessage(payload.(string)))
 			}
 		default:
 			log.Println(v, "is of a type I don't know how to handle")
