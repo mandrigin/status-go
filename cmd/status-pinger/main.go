@@ -102,8 +102,8 @@ func makeNodeConfig() (*params.NodeConfig, error) {
 }
 
 func main() {
-
-	db, err := leveldb.OpenFile("/tmp/hnny-persistence.db", nil)
+	cwd, _ := os.Getwd()
+	db, err := leveldb.OpenFile(cwd+"/data", nil)
 	if err != nil {
 		log.Fatal("can't open levelDB file. ERR: %v", err)
 	}
