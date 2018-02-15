@@ -1,11 +1,8 @@
 package bots
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"time"
@@ -20,21 +17,6 @@ type apiHolder struct {
 
 func (a *apiHolder) API() *api.StatusAPI {
 	return a.api
-}
-
-type StatusMessage struct {
-	ID        string
-	From      string
-	Text      string
-	Timestamp int64
-	Raw       string
-}
-
-func MessageFromPayload(payload string) StatusMessage {
-	message := unrawrChatMessage(payload)
-	return StatusMessage{
-		Raw: message,
-	}
 }
 
 type StatusChannel struct {
@@ -72,8 +54,10 @@ func (ch *StatusChannel) ReadMessages() (result []StatusMessage) {
 
 func (ch *StatusChannel) SendMessage(text string) {
 	cmd := `{"jsonrpc":"2.0","id":0,"method":"shh_post","params":[{"from":"%s","topic":"0xaabb11ee","payload":"%s","symKeyID":"%s","sym-key-password":"status","ttl":2400,"powTarget":0.001,"powTime":1}]}`
-	payload := rawrChatMessage(makeChatMessage(text, ch.ChannelName))
-	cmd = fmt.Sprintf(cmd, ch.AccountAddress, payload, ch.ChannelKey)
+
+	message := NewStatusMessage(ch.UserName, text, ch.ChannelName)
+
+	cmd = fmt.Sprintf(cmd, ch.AccountAddress, message.ToPayload(), ch.ChannelKey)
 	log.Println("-> SENT:", ch.API().CallRPC(cmd))
 }
 
@@ -159,40 +143,4 @@ func unmarshalJSON(j string) interface{} {
 	var v interface{}
 	json.Unmarshal([]byte(j), &v)
 	return v
-}
-
-func rawrChatMessage(raw string) string {
-	bytes := []byte(raw)
-	return fmt.Sprintf("0x%s", hex.EncodeToString(bytes))
-}
-
-func unrawrChatMessage(message string) string {
-	bytes, err := hex.DecodeString(message[2:])
-	if err != nil {
-		return err.Error()
-	}
-	return string(bytes)
-}
-
-// newUUID generates a random UUID according to RFC 4122
-func newUUID() string {
-	uuid := make([]byte, 16)
-	n, err := io.ReadFull(rand.Reader, uuid)
-	if n != len(uuid) || err != nil {
-		panic(err)
-	}
-	// variant bits; see section 4.1.1
-	uuid[8] = uuid[8]&^0xc0 | 0x80
-	// version 4 (pseudo-random); see section 4.1.3
-	uuid[6] = uuid[6]&^0xf0 | 0x40
-	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:])
-}
-
-func makeChatMessage(msg string, chat string) string {
-	format := `{:message-id "%s", :group-id "%s", :content "%s", :username "Robotic Jet Gopher", :type :public-group-message, :show? true, :clock-value 1, :requires-ack? false, :content-type "text/plain", :timestamp %d}`
-
-	messageID := newUUID()
-	timestamp := time.Now().Unix() * 1000
-
-	return fmt.Sprintf(format, messageID, chat, msg, timestamp)
 }
