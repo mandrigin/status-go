@@ -10,7 +10,6 @@ import (
 )
 
 func main() {
-
 	config, err := bots.NodeConfig()
 	if err != nil {
 		log.Fatalf("Making config failed: %v", err)
@@ -39,30 +38,3 @@ func main() {
 	// wait till node has been stopped
 	node.Wait()
 }
-
-/*
-func readChannel(api *api.StatusAPI, cmd string) {
-	for {
-		f := unmarshalJSON(api.CallRPC(cmd))
-		v := f.(map[string]interface{})["result"]
-		switch vv := v.(type) {
-		case []interface{}:
-			for _, u := range vv {
-				payload := u.(map[string]interface{})["payload"]
-				log.Println("<- RECEIVED:", unrawrChatMessage(payload.(string)))
-			}
-		default:
-			log.Println(v, "is of a type I don't know how to handle")
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-}
-
-func unrawrChatMessage(message string) string {
-	bytes, err := hex.DecodeString(message[2:])
-	if err != nil {
-		return err.Error()
-	}
-	return string(bytes)
-}
-*/

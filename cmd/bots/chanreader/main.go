@@ -1,14 +1,14 @@
-package chanreader
+package main
 
+import (
+	"log"
+	"time"
+
+	"github.com/status-im/status-go/cmd/bots"
+	"github.com/status-im/status-go/geth/api"
+)
 
 func main() {
-	cwd, _ := os.Getwd()
-	db, err := leveldb.OpenFile(cwd+"/data", nil)
-	if err != nil {
-		log.Fatal("can't open levelDB file. ERR: %v", err)
-	}
-	defer db.Close()
-
 	config, err := bots.NodeConfig()
 	if err != nil {
 		log.Fatalf("Making config failed: %v", err)
@@ -17,7 +17,7 @@ func main() {
 
 	backend := api.NewStatusBackend()
 	log.Println("Starting node...")
-	started, err := backend.StartNode(config)
+	err = backend.StartNode(config)
 	if err != nil {
 		log.Fatalf("Node start failed: %v", err)
 		return
@@ -29,15 +29,11 @@ func main() {
 		return
 	}
 
-	bots
-	.SignupOrLogin(node, "my-cool-password")
-	.Join("humans-need-not-apply", "Cloudy Test Baboon")
-	.RepeatEvery(10 * time.Second, func(ch *StatusChannel) {
-		message := fmt.Sprintf("Gopher, gopher: %d", time.Now().Unix())
-		ch.WriteMessage(message)
+	bots.SignupOrLogin(api.NewStatusAPIWithBackend(backend), "my-cool-password").Join("humans-need-not-apply", "Cloudy Test Baboon").RepeatEvery(100*time.Millisecond, func(ch *bots.StatusChannel) {
+		for _, msg := range ch.ReadMessages() {
+			log.Println("RCVD:", msg)
+		}
 	})
-
-	//loginAndRun(api.NewStatusAPIWithBackend(backend), db)
 
 	// wait till node has been stopped
 	node.Wait()

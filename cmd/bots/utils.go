@@ -38,9 +38,26 @@ func (ch *StatusChannel) RepeatEvery(ti time.Duration, f func(ch *StatusChannel)
 	}
 }
 
+func (ch *StatusChannel) ReadMessages() (result []string) {
+	cmd := `{"jsonrpc":"2.0","id":2968,"method":"shh_getFilterMessages","params":["%s"]}`
+	f := unmarshalJSON(ch.API().CallRPC(fmt.Sprintf(cmd, ch.FilterID)))
+	v := f.(map[string]interface{})["result"]
+	switch vv := v.(type) {
+	case []interface{}:
+		for _, u := range vv {
+			payload := u.(map[string]interface{})["payload"]
+			message := unrawrChatMessage(payload.(string))
+			result = append(result, message)
+		}
+	default:
+		log.Println(v, "is of a type I don't know how to handle")
+	}
+	return result
+}
+
 func (ch *StatusChannel) SendMessage(text string) {
 	cmd := `{"jsonrpc":"2.0","id":0,"method":"shh_post","params":[{"from":"%s","topic":"0xaabb11ee","payload":"%s","symKeyID":"%s","sym-key-password":"status","ttl":2400,"powTarget":0.001,"powTime":1}]}`
-	payload := rawrChatMessage(makeChatMessage(text))
+	payload := rawrChatMessage(makeChatMessage(text, ch.ChannelName))
 	cmd = fmt.Sprintf(cmd, ch.AccountAddress, payload, ch.ChannelKey)
 	log.Println("-> SENT:", ch.API().CallRPC(cmd))
 }
@@ -134,6 +151,14 @@ func rawrChatMessage(raw string) string {
 	return fmt.Sprintf("0x%s", hex.EncodeToString(bytes))
 }
 
+func unrawrChatMessage(message string) string {
+	bytes, err := hex.DecodeString(message[2:])
+	if err != nil {
+		return err.Error()
+	}
+	return string(bytes)
+}
+
 // newUUID generates a random UUID according to RFC 4122
 func newUUID() string {
 	uuid := make([]byte, 16)
@@ -148,11 +173,11 @@ func newUUID() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:])
 }
 
-func makeChatMessage(msg string) string {
-	format := `{:message-id "%s", :group-id "humans-need-not-apply", :content "%s", :username "Robotic Jet Gopher", :type :public-group-message, :show? true, :clock-value 1, :requires-ack? false, :content-type "text/plain", :timestamp %d}`
+func makeChatMessage(msg string, chat string) string {
+	format := `{:message-id "%s", :group-id "%s", :content "%s", :username "Robotic Jet Gopher", :type :public-group-message, :show? true, :clock-value 1, :requires-ack? false, :content-type "text/plain", :timestamp %d}`
 
 	messageID := newUUID()
 	timestamp := time.Now().Unix() * 1000
 
-	return fmt.Sprintf(format, messageID, msg, timestamp)
+	return fmt.Sprintf(format, messageID, chat, msg, timestamp)
 }
