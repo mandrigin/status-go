@@ -5,8 +5,16 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"regexp"
+	"strconv"
 	"time"
 )
+
+const (
+	messageRegexString = `{:message-id "(?P<ID>.+)",\s+:group-id "(?P<GroupID>.+)",\s+:content "(?P<Content>.+)",\s+:username "(?P<Username>.+)",\s+:type :public-group-message.+:timestamp (?P<Timestamp>\d+)}`
+)
+
+var messageRegex *regexp.Regexp = regexp.MustCompile(messageRegexString)
 
 type StatusMessage struct {
 	ID          string
@@ -41,8 +49,25 @@ func (m StatusMessage) ToPayload() string {
 
 func MessageFromPayload(payload string) StatusMessage {
 	message := unrawrChatMessage(payload)
+
+	r := messageRegex.FindStringSubmatch(message)
+
+	dict := make(map[string]string)
+	for idx, name := range messageRegex.SubexpNames() {
+		if len(name) > 0 {
+			dict[name] = r[idx]
+		}
+	}
+
+	timestamp, _ := strconv.Atoi(dict["Timestamp"])
+
 	return StatusMessage{
-		Raw: message,
+		ID:          dict["ID"],
+		From:        dict["Username"],
+		Text:        dict["Content"],
+		ChannelName: dict["GroupID"],
+		Timestamp:   int64(timestamp),
+		Raw:         message,
 	}
 }
 
