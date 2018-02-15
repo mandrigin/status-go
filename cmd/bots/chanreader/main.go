@@ -31,7 +31,7 @@ func main() {
 
 	bots.SignupOrLogin(api.NewStatusAPIWithBackend(backend), "my-cool-password").Join("humans-need-not-apply", "Cloudy Test Baboon").RepeatEvery(100*time.Millisecond, func(ch *bots.StatusChannel) {
 		for _, msg := range ch.ReadMessages() {
-			log.Println("RCVD:", msg)
+			log.Println("RCVD:", msg.Raw)
 		}
 	})
 

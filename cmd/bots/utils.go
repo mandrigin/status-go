@@ -22,6 +22,21 @@ func (a *apiHolder) API() *api.StatusAPI {
 	return a.api
 }
 
+type StatusMessage struct {
+	ID        string
+	From      string
+	Text      string
+	Timestamp int64
+	Raw       string
+}
+
+func MessageFromPayload(payload string) StatusMessage {
+	message := unrawrChatMessage(payload)
+	return StatusMessage{
+		Raw: message,
+	}
+}
+
 type StatusChannel struct {
 	apiHolder
 	ChannelName    string
@@ -38,7 +53,7 @@ func (ch *StatusChannel) RepeatEvery(ti time.Duration, f func(ch *StatusChannel)
 	}
 }
 
-func (ch *StatusChannel) ReadMessages() (result []string) {
+func (ch *StatusChannel) ReadMessages() (result []StatusMessage) {
 	cmd := `{"jsonrpc":"2.0","id":2968,"method":"shh_getFilterMessages","params":["%s"]}`
 	f := unmarshalJSON(ch.API().CallRPC(fmt.Sprintf(cmd, ch.FilterID)))
 	v := f.(map[string]interface{})["result"]
@@ -46,7 +61,7 @@ func (ch *StatusChannel) ReadMessages() (result []string) {
 	case []interface{}:
 		for _, u := range vv {
 			payload := u.(map[string]interface{})["payload"]
-			message := unrawrChatMessage(payload.(string))
+			message := MessageFromPayload(payload.(string))
 			result = append(result, message)
 		}
 	default:
