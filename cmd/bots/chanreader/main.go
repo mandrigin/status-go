@@ -29,12 +29,25 @@ func main() {
 		return
 	}
 
+	messages := NewMessagesStore()
+	defer messages.Close()
+
 	bots.SignupOrLogin(api.NewStatusAPIWithBackend(backend), "my-cool-password").Join("humans-need-not-apply", "Cloudy Test Baboon").RepeatEvery(100*time.Millisecond, func(ch *bots.StatusChannel) {
 		for _, msg := range ch.ReadMessages() {
-			log.Printf("RCVD: %+v\n", msg)
+			if err := messages.Add(msg); err != nil {
+				log.Printf("Error while storing message: ERR: %v", err)
+			}
 		}
 	})
 
+	go func() {
+		for {
+			log.Printf("MESSAGES Messages: %d", len(messages.Messages("humans")))
+			time.Sleep(1 * time.Second)
+		}
+	}()
+
 	// wait till node has been stopped
 	node.Wait()
+
 }

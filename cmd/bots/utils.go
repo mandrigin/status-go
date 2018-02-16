@@ -29,10 +29,12 @@ type StatusChannel struct {
 }
 
 func (ch *StatusChannel) RepeatEvery(ti time.Duration, f func(ch *StatusChannel)) {
-	for {
-		f(ch)
-		time.Sleep(ti)
-	}
+	go func() {
+		for {
+			f(ch)
+			time.Sleep(ti)
+		}
+	}()
 }
 
 func (ch *StatusChannel) ReadMessages() (result []StatusMessage) {

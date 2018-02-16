@@ -17,11 +17,11 @@ const (
 var messageRegex *regexp.Regexp = regexp.MustCompile(messageRegexString)
 
 type StatusMessage struct {
-	ID          string
-	From        string
-	Text        string
-	ChannelName string
-	Timestamp   int64
+	ID          string `json:"id"`
+	From        string `json:"from"`
+	Text        string `json:"text"`
+	ChannelName string `json:"channel"`
+	Timestamp   int64  `json:"ts"`
 	Raw         string
 }
 
