@@ -9,6 +9,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -58,9 +59,9 @@ type NotificationServer struct {
 // ClientSession abstracts notification client, which expects notifications whenever
 // some envelope can be decoded with session key (key hash is compared for optimization)
 type ClientSession struct {
-	ClientKey      string      // public key uniquely identifying a client
-	SessionKey     []byte      // actual symkey used for client - server communication
-	SessionKeyHash common.Hash // The Keccak256Hash of the symmetric key, which is shared between server/client
+	ClientKey       string      // public key uniquely identifying a client
+	SessionKey      []byte      // actual symkey used for client - server communication
+	SessionKeyHash  common.Hash // The Keccak256Hash of the symmetric key, which is shared between server/client
 	SessionKeyInput []byte      // raw symkey used as input for actual SessionKey
 }
 
